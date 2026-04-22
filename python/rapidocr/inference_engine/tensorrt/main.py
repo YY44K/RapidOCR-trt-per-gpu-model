@@ -1,6 +1,7 @@
 # -*- encoding: utf-8 -*-
 # @Author: SWHL
 # @Contact: liekkaskono@163.com
+import re
 import traceback
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -294,10 +295,10 @@ class TRTInferSession(InferSession):
         cache_dir.mkdir(parents=True, exist_ok=True)
 
         model_name = self._get_model_name(cfg)
-        gpu_arch = self._get_gpu_arch()
+        gpu_key = self._get_gpu_cache_key()
         precision = "fp16" if self.engine_cfg.get("use_fp16", True) else "fp32"
 
-        return cache_dir / f"{model_name}_{gpu_arch}_{precision}.engine"
+        return cache_dir / f"{model_name}_{gpu_key}_{precision}.engine"
 
     def _get_model_name(self, cfg: Dict[str, Any]) -> str:
         """Extract model name from config for engine filename."""
@@ -323,6 +324,32 @@ class TRTInferSession(InferSession):
         assert status.value == 0, f"Failed to get compute capability: {status}"
 
         return f"sm{major}{minor}"
+
+    def _get_gpu_cache_key(self) -> str:
+        gpu_arch = self._get_gpu_arch()
+        if not self.engine_cfg.get("cache_per_gpu_model", False):
+            return gpu_arch
+
+        gpu_model = self._sanitize_cache_key(self._get_gpu_model_name())
+        return f"{gpu_arch}_{gpu_model}"
+
+    def _get_gpu_model_name(self) -> str:
+        """Get active CUDA device model name for optional cache separation."""
+        status, device_props = cudart.cudaGetDeviceProperties(self.device_id)
+        assert status.value == 0, f"Failed to get CUDA device properties: {status}"
+
+        gpu_name = device_props.name
+        if isinstance(gpu_name, bytes):
+            return gpu_name.decode("utf-8", errors="ignore").rstrip("\x00")
+
+        if isinstance(gpu_name, bytearray):
+            return bytes(gpu_name).decode("utf-8", errors="ignore").rstrip("\x00")
+
+        return str(gpu_name).rstrip("\x00")
+
+    def _sanitize_cache_key(self, value: str) -> str:
+        sanitized = re.sub(r"[^0-9a-zA-Z]+", "_", value).strip("_").lower()
+        return sanitized or "unknown"
 
     def _load_or_build_engine(
         self, cfg: Dict[str, Any], engine_path: Path

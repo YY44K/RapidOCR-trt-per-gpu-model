@@ -52,6 +52,9 @@ def test_cli_config(capsys, cmd):
 
     cfg_yaml_path = tests_dir / "config.yaml"
     assert cfg_yaml_path.exists()
+    assert "cache_per_gpu_model: false" in cfg_yaml_path.read_text(
+        encoding="utf-8"
+    )
     cfg_yaml_path.unlink()
 
 

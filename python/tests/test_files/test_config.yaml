@@ -105,6 +105,7 @@ EngineConfig:
         # Engine caching
         cache_dir: null  # null = use default models dir
         force_rebuild: false
+        cache_per_gpu_model: false
 
         # Dynamic shape optimization profiles
         det_profile:
